@@ -19,6 +19,7 @@ import requests
 import logging
 from collections import Counter
 
+
 class Client(object):
 
     def __init__(self,
@@ -43,10 +44,9 @@ class Client(object):
         self._discover_version()
 
     def servers(self):
+        url = '/api/v1/servers'
         if self.version == 'exp':
             url = '/servers'
-        elif self.version == '1':
-            url = '/api/v1/servers'
         server_data = self.get(url)
         servers = []
         for server in server_data:
@@ -120,7 +120,7 @@ class Client(object):
 
 class Server(object):
     def __init__(self,
-                 type,
+                 zone_type,
                  name,
                  url,
                  daemon_type,
@@ -129,7 +129,7 @@ class Server(object):
                  zones_url,
                  client
                  ):
-        self.type = type
+        self.zone_type = zone_type
         self.name = name
         self.url = url
         self.daemon_type = daemon_type
@@ -154,8 +154,6 @@ class Server(object):
         return options
 
     def refresh(self):
-        data = self.client.get(self.url)
-        # todo: update self (Implement this shit)
         zd = self.client.get(self.zones_url)
         for zone in zd:
             new_zone = Zone(zone['name'],
@@ -175,7 +173,7 @@ class Server(object):
             if zone.name == cur_zone.name:
                 exists = True
         if exists:
-            raise pdnsZoneExists(cur_zone.name)
+            raise PDNSZoneExists(cur_zone.name)
         data = zone.dict()
         zd = self.client.post(self.zones_url, data)
         #todo api version check
@@ -189,6 +187,7 @@ class Server(object):
             if zone.name == zone_id:
                 self._zones.remove(zone)
                 self.client.delete(zone.url)
+
 
 class Zone(object):
     def __init__(self,
@@ -290,7 +289,6 @@ class Zone(object):
             d_rrset['comments'] = []
             d_rrset['changetype'] = 'DELETE'
             del_list.append(d_rrset)
-            self._rrsets.remove(rrset)
         final_list.extend(patch_list)
         final_list.extend(del_list)
         final_list.extend(new_list)
@@ -328,12 +326,12 @@ class Metadata(object):
 class RRset(object):
     def __init__(self,
                  name,
-                 type,
+                 rrset_type,
                  ttl=None,
                  records=None,
                  comments=None):
         self.name = name
-        self.type = type
+        self.type = rrset_type
         self.ttl = ttl if ttl else records[0]['ttl']
         self._records = records if records else []
         self._comments = comments if comments else []
@@ -365,7 +363,6 @@ class RRset(object):
             self._records.append(records)
         self._notify_zone()
 
-
     def del_records(self, records):
         if type(records) == list:
             for record in records:
@@ -392,10 +389,15 @@ class RRset(object):
         self._zone = zone
 
     def _record_tuple(self):
-        return map(lambda x: (x['content'], x['disabled']), self._records)
+        return map(lambda x: (x['content'],
+                              x['disabled']
+                              ), self._records)
 
     def _comment_tuple(self):
-        return map(lambda x: (x['content'], x['account'], x['modified_at']), self._comments)
+        return map(lambda x: (x['content'],
+                              x['account'],
+                              x['modified_at']
+                              ),self._comments)
 
     def __eq__(self, other):
         if type(other) == RRset:
@@ -417,6 +419,7 @@ class RRset(object):
         else:
             return False
 
-class pdnsZoneExists(Exception):
-      def __init__(self, expression):
+
+class PDNSZoneExists(Exception):
+    def __init__(self, expression):
         self.expression = expression
